@@ -1,0 +1,15 @@
+# PipelineIQ — Velora client Terraform variables
+#
+# Copy this file to terraform.tfvars (gitignored) and fill in real values.
+# terraform.tfvars is read automatically by `terraform plan` / `terraform apply`.
+
+subscription_id = "ea05f17f-b2bb-40ac-a391-afe41a9f5cbf"  # Microsoft Azure Sponsorship
+tenant_id       = "23d48723-f83f-4245-9aec-192176d3b96c"  # Sail Analytics
+
+# All optional (defaults shown):
+# environment                 = "dev"
+# location                    = "centralindia"
+# resource_group_name         = "pipelineiq-rg-dev"
+# client_name                 = "pipelineiq"
+# log_retention_days          = 30
+# kv_purge_protection_enabled = false

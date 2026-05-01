@@ -126,3 +126,20 @@ output "databricks_sql_warehouse_jdbc_url" {
 output "databricks_secret_scope" {
   value = module.databricks_uc.secret_scope_name
 }
+
+# ------------------------------------------------------------
+# Tier 4.6 — Azure Functions
+# ------------------------------------------------------------
+
+output "functions_app_name" {
+  value = module.functions.name
+}
+
+output "functions_default_hostname" {
+  value = module.functions.default_hostname
+}
+
+output "functions_principal_id" {
+  description = "Object ID of the Function App MSI. Used to grant Azure SQL + other resource access."
+  value       = module.functions.principal_id
+}

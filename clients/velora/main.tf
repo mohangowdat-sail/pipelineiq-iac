@@ -133,6 +133,31 @@ module "databricks_uc" {
   ]
 }
 
+module "functions" {
+  source = "../../core/functions"
+
+  name                       = "${local.name_prefix}-functions-${local.name_suffix}"
+  resource_group_name        = data.azurerm_resource_group.this.name
+  location                   = data.azurerm_resource_group.this.location
+  log_analytics_workspace_id = module.log_analytics.id
+  key_vault_id               = module.key_vault.id
+  key_vault_uri              = module.key_vault.uri
+
+  app_settings = {
+    # Source DB — Function reads + writes velora_oms via AAD MSI auth.
+    "AZURE_SQL_SERVER"   = module.azure_sql_velora.server_fqdn
+    "AZURE_SQL_DATABASE" = module.azure_sql_velora.database_name
+  }
+
+  tags = local.common_tags
+
+  depends_on = [
+    module.key_vault,
+    module.log_analytics,
+    module.azure_sql_velora,
+  ]
+}
+
 resource "azurerm_key_vault_secret" "postgres_admin_password" {
   name         = "postgres-admin-password"
   value        = module.postgres.admin_password

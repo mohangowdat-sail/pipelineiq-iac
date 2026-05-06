@@ -145,8 +145,9 @@ module "functions" {
 
   app_settings = {
     # Source DB — Function reads + writes velora_oms via AAD MSI auth.
-    "AZURE_SQL_SERVER"   = module.azure_sql_velora.server_fqdn
-    "AZURE_SQL_DATABASE" = module.azure_sql_velora.database_name
+    "AZURE_SQL_SERVER"    = module.azure_sql_velora.server_fqdn
+    "AZURE_SQL_DATABASE"  = module.azure_sql_velora.database_name
+    "AZURE_SQL_AUTH_MODE" = "msi"
   }
 
   tags = local.common_tags

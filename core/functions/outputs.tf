@@ -1,23 +1,23 @@
 output "id" {
-  value = azurerm_linux_function_app.this.id
+  value = azurerm_function_app_flex_consumption.this.id
 }
 
 output "name" {
-  value = azurerm_linux_function_app.this.name
+  value = azurerm_function_app_flex_consumption.this.name
 }
 
 output "default_hostname" {
   description = "Public HTTPS hostname for the Function App."
-  value       = azurerm_linux_function_app.this.default_hostname
+  value       = azurerm_function_app_flex_consumption.this.default_hostname
 }
 
 output "principal_id" {
   description = "Object ID of the Function App's system-assigned managed identity. Use this when granting access to dependent resources."
-  value       = azurerm_linux_function_app.this.identity[0].principal_id
+  value       = azurerm_function_app_flex_consumption.this.identity[0].principal_id
 }
 
 output "tenant_id" {
-  value = azurerm_linux_function_app.this.identity[0].tenant_id
+  value = azurerm_function_app_flex_consumption.this.identity[0].tenant_id
 }
 
 output "application_insights_id" {
@@ -31,4 +31,9 @@ output "application_insights_connection_string" {
 
 output "runtime_storage_account_name" {
   value = azurerm_storage_account.func_runtime.name
+}
+
+output "deployment_container_name" {
+  description = "Storage blob container Flex Consumption pulls the deployment package from."
+  value       = azurerm_storage_container.deployment_package.name
 }

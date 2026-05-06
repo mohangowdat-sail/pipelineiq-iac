@@ -1,6 +1,7 @@
 # ------------------------------------------------------------
 # Storage account — required by the Functions runtime for triggers,
-# logging, and binding state. Separate from the workload ADLS account.
+# logging, binding state, AND (Flex Consumption only) the deployment
+# package container that the platform downloads code from.
 # ------------------------------------------------------------
 
 resource "azurerm_storage_account" "func_runtime" {
@@ -20,8 +21,20 @@ resource "azurerm_storage_account" "func_runtime" {
   tags = var.tags
 }
 
+# Flex Consumption requires a private blob container for the deployment
+# package. The platform pulls the ZIP from this container at host start.
+resource "azurerm_storage_container" "deployment_package" {
+  name                  = "app-package-${var.name}"
+  storage_account_id    = azurerm_storage_account.func_runtime.id
+  container_access_type = "private"
+}
+
 # ------------------------------------------------------------
-# App Service plan — Linux Consumption (Y1).
+# App Service plan — Flex Consumption (FC1, Linux).
+#
+# Replaces the previous Y1 (Linux Consumption) plan. Same scale-to-zero
+# economics, but timer triggers fire reliably (Y1 + Linux + non-HTTP
+# triggers is the documented sad path).
 # ------------------------------------------------------------
 
 resource "azurerm_service_plan" "this" {
@@ -30,7 +43,7 @@ resource "azurerm_service_plan" "this" {
   location            = var.location
 
   os_type  = "Linux"
-  sku_name = "Y1" # Linux Consumption
+  sku_name = "FC1" # Flex Consumption
 
   tags = var.tags
 }
@@ -50,17 +63,38 @@ resource "azurerm_application_insights" "this" {
 }
 
 # ------------------------------------------------------------
-# Linux Function App — Python 3.11, system-assigned MSI.
+# Function App — Flex Consumption (FC1).
+#
+# Why Flex Consumption (not Y1 Linux Consumption): Y1 timer triggers
+# silently miss scheduled fires when the host scales to zero on Linux.
+# Flex Consumption is Microsoft's documented replacement that fires
+# non-HTTP triggers reliably while preserving scale-to-zero economics.
+# Cost remains effectively zero for our once-a-day generator workload
+# (well under the 100K GB-s/month free grant).
 # ------------------------------------------------------------
 
-resource "azurerm_linux_function_app" "this" {
+resource "azurerm_function_app_flex_consumption" "this" {
   name                = var.name
   resource_group_name = var.resource_group_name
   location            = var.location
 
-  service_plan_id            = azurerm_service_plan.this.id
-  storage_account_name       = azurerm_storage_account.func_runtime.name
-  storage_account_access_key = azurerm_storage_account.func_runtime.primary_access_key
+  service_plan_id = azurerm_service_plan.this.id
+
+  # Deployment package — Flex pulls the user code ZIP from this private
+  # blob container. Auth via storage-account key (simplest; the runtime
+  # storage account is dedicated to this Function App and not shared).
+  storage_container_type      = "blobContainer"
+  storage_container_endpoint  = "${azurerm_storage_account.func_runtime.primary_blob_endpoint}${azurerm_storage_container.deployment_package.name}"
+  storage_authentication_type = "StorageAccountConnectionString"
+  storage_access_key          = azurerm_storage_account.func_runtime.primary_access_key
+
+  runtime_name    = "python"
+  runtime_version = "3.11"
+
+  # Memory + max scale. 2048 MB is the Flex default and matches the old
+  # Y1 footprint of the daily generator (peak ~512 MB observed S5).
+  instance_memory_in_mb  = 2048
+  maximum_instance_count = 40
 
   https_only = true
 
@@ -69,24 +103,20 @@ resource "azurerm_linux_function_app" "this" {
   }
 
   site_config {
-    application_stack {
-      python_version = "3.11"
-    }
-
     application_insights_connection_string = azurerm_application_insights.this.connection_string
     application_insights_key               = azurerm_application_insights.this.instrumentation_key
-
-    ftps_state = "Disabled"
   }
 
   app_settings = merge(
     {
-      "FUNCTIONS_WORKER_RUNTIME"            = "python"
-      "AzureWebJobsFeatureFlags"            = "EnableWorkerIndexing"
-      "SCM_DO_BUILD_DURING_DEPLOYMENT"      = "true"
-      "ENABLE_ORYX_BUILD"                   = "true"
-      "PYTHON_ENABLE_WORKER_EXTENSIONS"     = "1"
-      "KEY_VAULT_URI"                       = var.key_vault_uri
+      # App Insights — explicit env vars in addition to site_config wiring,
+      # so the Python worker picks them up regardless of host version.
+      "APPLICATIONINSIGHTS_CONNECTION_STRING" = azurerm_application_insights.this.connection_string
+      "APPINSIGHTS_INSTRUMENTATIONKEY"        = azurerm_application_insights.this.instrumentation_key
+
+      "AzureWebJobsFeatureFlags"        = "EnableWorkerIndexing"
+      "PYTHON_ENABLE_WORKER_EXTENSIONS" = "1"
+      "KEY_VAULT_URI"                   = var.key_vault_uri
     },
     var.app_settings,
   )
@@ -101,5 +131,5 @@ resource "azurerm_linux_function_app" "this" {
 resource "azurerm_role_assignment" "func_kv_secrets_user" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_linux_function_app.this.identity[0].principal_id
+  principal_id         = azurerm_function_app_flex_consumption.this.identity[0].principal_id
 }
